@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -7,57 +7,78 @@ import {
   SafeAreaView,
   TouchableOpacity,
   Platform,
+  ActivityIndicator,
+  Alert,
+  RefreshControl,
 } from "react-native";
 import { ChevronRightIcon, ClockIcon } from "react-native-heroicons/outline";
 import CustomStatusBar from "../../components/StatusBar";
 import { useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import axios from "axios";
 
 export default function History() {
   const router = useRouter();
+  const [orderHistory, setOrderHistory] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(null);
 
-  // Sample order history data
-  const orderHistory = [
-    {
-      id: "1",
-      orderNumber: "19928",
-      customerName: "Samiksha Sharma",
-      date: "22 Nov 2024",
-      time: "14:30",
-      status: "Delivered",
-      amount: "₹1,499",
-      items: 3,
-    },
-    {
-      id: "2",
-      orderNumber: "19929",
-      customerName: "RK Deo",
-      date: "21 Nov 2024",
-      time: "11:15",
-      status: "Cancelled",
-      amount: "₹2,299",
-      items: 2,
-    },
-    {
-      id: "3",
-      orderNumber: "19930",
-      customerName: "Prajwal Kumar",
-      date: "20 Nov 2024",
-      time: "16:45",
-      status: "Delivered",
-      amount: "₹899",
-      items: 1,
-    },
-    {
-      id: "4",
-      orderNumber: "19931",
-      customerName: "Ankit Singh",
-      date: "20 Nov 2024",
-      time: "09:20",
-      status: "Delivered",
-      amount: "₹3,499",
-      items: 4,
-    },
-  ];
+  useEffect(() => {
+    fetchOrderHistory();
+  }, []);
+
+  const fetchOrderHistory = async () => {
+    try {
+      const token = await AsyncStorage.getItem("userToken");
+
+      if (!token) {
+        throw new Error("No authentication token found");
+      }
+
+      const response = await axios.get(
+        "https://tezapi.demogames.cloud/api/v2/deliveryBoy/OrderHistory",
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const transformedOrderHistory = response.data.map((order) => ({
+        id: order.order_id.toString(),
+        orderNumber: order.order_id.toString(),
+        customerName: order.customer_name,
+        date: new Date(order.updated_at).toLocaleDateString("en-IN", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        }),
+        time: new Date(order.updated_at).toLocaleTimeString("en-IN", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        }),
+        status: order.status.charAt(0).toUpperCase() + order.status.slice(1),
+        amount: `₹${order.total}`,
+        items: order.order_items,
+      }));
+
+      setOrderHistory(transformedOrderHistory);
+      setLoading(false);
+      setRefreshing(false);
+    } catch (err) {
+      setError(err.message);
+      setLoading(false);
+      setRefreshing(false);
+      Alert.alert("Error", "Failed to fetch order history");
+    }
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchOrderHistory();
+  };
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -70,91 +91,104 @@ export default function History() {
     }
   };
 
-  const onOrderPress = (orderId) => {
-    router.push(`/orderDetails/${orderId}`);
-  };
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <CustomStatusBar />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#2D3436" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <CustomStatusBar />
+        <View style={styles.loadingContainer}>
+          <Text style={styles.errorText}>Failed to load order history</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       <CustomStatusBar />
 
-      {/* Header */}
-      {/* <View style={styles.header}>
-        <Text style={styles.headerTitle}>Order History</Text>
-        <Text style={styles.headerSubtitle}>View your past orders</Text>
-      </View> */}
-
       {/* Order List */}
-      <ScrollView style={styles.scrollView}>
-        {orderHistory.map((order) => (
-          <TouchableOpacity key={order.id} style={styles.orderCard}>
-            <View style={styles.orderHeader}>
-              <View style={styles.orderNumberContainer}>
-                <Text style={styles.orderNumberLabel}>Order #</Text>
-                <Text style={styles.orderNumber}>{order.orderNumber}</Text>
-              </View>
-              <View
-                style={[
-                  styles.statusBadge,
-                  { backgroundColor: getStatusColor(order.status) + "20" },
-                ]}
-              >
-                <Text
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={
+          orderHistory.length === 0 ? styles.emptyContainer : null
+        }
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={["#2D3436"]}
+            tintColor="#2D3436"
+          />
+        }
+      >
+        {orderHistory.length === 0 ? (
+          <Text style={styles.emptyText}>No order history found</Text>
+        ) : (
+          orderHistory.map((order) => (
+            <TouchableOpacity key={order.id} style={styles.orderCard}>
+              <View style={styles.orderHeader}>
+                <View style={styles.orderNumberContainer}>
+                  <Text style={styles.orderNumberLabel}>Order #</Text>
+                  <Text style={styles.orderNumber}>{order.orderNumber}</Text>
+                </View>
+                <View
                   style={[
-                    styles.statusText,
-                    { color: getStatusColor(order.status) },
+                    styles.statusBadge,
+                    { backgroundColor: getStatusColor(order.status) + "20" },
                   ]}
                 >
-                  {order.status}
-                </Text>
+                  <Text
+                    style={[
+                      styles.statusText,
+                      { color: getStatusColor(order.status) },
+                    ]}
+                  >
+                    {order.status}
+                  </Text>
+                </View>
               </View>
-            </View>
 
-            <View style={styles.customerInfo}>
-              <Text style={styles.customerName}>{order.customerName}</Text>
-              <View style={styles.timeContainer}>
-                <ClockIcon size={16} color="#666" />
-                <Text style={styles.timeText}>
-                  {order.date} • {order.time}
-                </Text>
+              <View style={styles.customerInfo}>
+                <Text style={styles.customerName}>{order.customerName}</Text>
+                <View style={styles.timeContainer}>
+                  <ClockIcon size={16} color="#666" />
+                  <Text style={styles.timeText}>
+                    {order.date} • {order.time}
+                  </Text>
+                </View>
               </View>
-            </View>
 
-            <View style={styles.orderFooter}>
-              <View style={styles.orderDetails}>
-                <Text style={styles.itemCount}>{order.items} items</Text>
-                <Text style={styles.amount}>{order.amount}</Text>
+              <View style={styles.orderFooter}>
+                <View style={styles.orderDetails}>
+                  <Text style={styles.itemCount}>{order.items} items</Text>
+                  <Text style={styles.amount}>{order.amount}</Text>
+                </View>
+                <ChevronRightIcon size={20} color="#666" />
               </View>
-              <ChevronRightIcon size={20} color="#666" />
-            </View>
-          </TouchableOpacity>
-        ))}
+            </TouchableOpacity>
+          ))
+        )}
       </ScrollView>
     </SafeAreaView>
   );
 }
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f5f5f5",
   },
-  header: {
-    padding: 20,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-  },
-  headerTitle: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#333",
-  },
-  headerSubtitle: {
-    fontSize: 14,
-    color: "#666",
-    marginTop: 4,
-  },
+
   scrollView: {
     flex: 1,
     padding: 16,
@@ -241,5 +275,23 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
     color: "#333",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  errorText: {
+    fontSize: 16,
+    color: "#F44336",
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  emptyText: {
+    fontSize: 16,
+    color: "#666",
   },
 });

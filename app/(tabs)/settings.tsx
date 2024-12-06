@@ -15,8 +15,13 @@ import {
   Ionicons,
 } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import index from "../index";
 
 export default function Settings() {
+  const router = useRouter();
+
   const handleLogout = () => {
     Alert.alert("Logout", "Are you sure you want to logout?", [
       {
@@ -26,27 +31,36 @@ export default function Settings() {
       {
         text: "Logout",
         style: "destructive",
-        onPress: () => {
-          // Add your logout logic here
-          console.log("Logout pressed");
+        onPress: async () => {
+          try {
+            await AsyncStorage.removeItem("userToken");
+
+            await AsyncStorage.removeItem("phoneNumber");
+            await AsyncStorage.removeItem("password");
+
+            router.replace(index);
+          } catch (error) {
+            console.error("Logout Error:", error);
+            Alert.alert(
+              "Logout Failed",
+              "An error occurred while logging out."
+            );
+          }
         },
       },
     ]);
   };
 
   const openTermsAndConditions = () => {
-    // Add navigation to Terms & Conditions page
-    console.log("Terms & Conditions pressed");
+    router.push("/terms-and-conditions");
   };
 
   const openPrivacyPolicy = () => {
-    // Add navigation to Privacy Policy page
-    console.log("Privacy Policy pressed");
+    router.push("/privacy-policy");
   };
 
   const openContact = () => {
-    // Add navigation to Contact page
-    console.log("Contact pressed");
+    router.push("/contact");
   };
 
   return (
@@ -54,7 +68,6 @@ export default function Settings() {
       <StatusBar barStyle="light-content" />
       <SafeAreaView style={styles.container}>
         <ScrollView style={styles.content}>
-          {/* Account Section */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Account</Text>
             <View style={styles.card}>
@@ -74,7 +87,6 @@ export default function Settings() {
             </View>
           </View>
 
-          {/* Legal Section */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Legal</Text>
             <View style={styles.card}>
@@ -116,7 +128,6 @@ export default function Settings() {
             </View>
           </View>
 
-          {/* Logout Button */}
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
             <LinearGradient
               colors={["#FF4B2B", "#FF416C"]}

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,32 +9,87 @@ import {
   Dimensions,
   StatusBar,
   Platform,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import axios from "axios";
 import { LinearGradient } from "expo-linear-gradient";
 import { MaterialCommunityIcons, Ionicons } from "@expo/vector-icons";
 
 const { width } = Dimensions.get("window");
 
 export default function Profile() {
-  const user = {
-    name: "John Doe",
-    email: "john.doe@example.com",
-    profilePhoto: "https://via.placeholder.com/150",
-    selectedPincodes: [
-      "110001",
-      "110002",
-      "110003",
-      "110004",
-      "110005",
-      "411037",
-      "112244",
-      "445566",
-      "875554",
-      "334466",
-    ],
-    status: "Active",
-    memberSince: "2023",
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    fetchUserProfile();
+  }, []);
+
+  const fetchUserProfile = async () => {
+    try {
+      const token = await AsyncStorage.getItem("userToken");
+
+      if (!token) {
+        throw new Error("No authentication token found");
+      }
+
+      // Make API call
+      const response = await axios.get(
+        "https://tezapi.demogames.cloud/api/v2/deliveryBoy/Profile",
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      setUser({
+        name: response.data.name,
+        email: response.data.email,
+        profilePhoto: `https://development-vcla.s3.ap-southeast-1.amazonaws.com/${response.data.image}`,
+        selectedPincodes: response.data.zip_codes,
+        status: response.data.status,
+        memberSince: new Date(response.data.joined).getFullYear().toString(),
+        areas: response.data.areas,
+      });
+
+      setLoading(false);
+    } catch (err) {
+      setError(err.message);
+      setLoading(false);
+      Alert.alert("Error", "Failed to fetch profile data");
+    }
   };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case "active":
+        return "#4CAF50";
+      case "block":
+        return "#F44336";
+      default:
+        return "#FFC107";
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#2D3436" />
+      </SafeAreaView>
+    );
+  }
+
+  if (error || !user) {
+    return (
+      <SafeAreaView style={styles.loadingContainer}>
+        <Text style={styles.errorText}>Failed to load profile</Text>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <>
@@ -53,7 +108,12 @@ export default function Profile() {
                     source={{ uri: user.profilePhoto }}
                     style={styles.profilePhoto}
                   />
-                  <View style={styles.statusIndicator} />
+                  <View
+                    style={[
+                      styles.statusIndicator,
+                      { backgroundColor: getStatusColor(user.status) },
+                    ]}
+                  />
                 </View>
               </View>
               <Text style={styles.userName}>{user.name}</Text>
@@ -63,7 +123,11 @@ export default function Profile() {
                   size={14}
                   color="#FFD700"
                 />
-                <Text style={styles.memberText}>Verified Member</Text>
+                <Text style={styles.memberText}>
+                  {user.status === "active"
+                    ? "Verified Member"
+                    : "Account Status: " + user.status}
+                </Text>
               </View>
             </View>
           </LinearGradient>
@@ -82,9 +146,7 @@ export default function Profile() {
                 size={24}
                 color="#2D3436"
               />
-              <Text style={styles.statNumber}>
-                {user.selectedPincodes.length}
-              </Text>
+              <Text style={styles.statNumber}>{user.areas}</Text>
               <Text style={styles.statLabel}>Areas</Text>
             </View>
             <View style={styles.statBox}>
@@ -154,11 +216,17 @@ export default function Profile() {
                 <MaterialCommunityIcons
                   name="shield-check"
                   size={30}
-                  color="#FFD700"
+                  color={getStatusColor(user.status)}
                 />
-                <Text style={styles.statusTitle}>Verified Account</Text>
+                <Text style={styles.statusTitle}>
+                  {user.status === "active"
+                    ? "Verified Account"
+                    : "Account Status"}
+                </Text>
                 <Text style={styles.statusSubtitle}>
-                  Your account is fully verified and active
+                  {user.status === "active"
+                    ? "Your account is fully verified and active"
+                    : "Your account is currently " + user.status}
                 </Text>
               </View>
             </LinearGradient>
@@ -369,5 +437,15 @@ const styles = StyleSheet.create({
     opacity: 0.8,
     marginTop: 5,
     textAlign: "center",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#f8f9fa",
+  },
+  errorText: {
+    fontSize: 18,
+    color: "#F44336",
   },
 });
